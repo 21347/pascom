@@ -1,0 +1,9 @@
+lib/
+*.bak
+*.lps
+backup/
+*.exe
+heap.trc
+debug.log
+*.dbg
+.directory
