@@ -1,4 +1,4 @@
-{pasComTCP: TCP/IP driver for the pasCom framework
+{pasComTCP: TCP/IP driver for the pasCom framework using Unix sockets
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public
 License as published by the Free Software Foundation; either
@@ -27,7 +27,7 @@ uses
   Classes, SysUtils, pasCom, fpAsync, fpSock;
 
 type
-  TTCPClientComStream = class(TAbstractComStream)
+  TTCPClientComStreamUnix = class(TAbstractComStream)
   private
     fTCP:TTCPClient;
     fHost:string;
@@ -80,10 +80,10 @@ implementation
 
 uses DateUtils;
 
-procedure TTCPClientComStream.InternalConnect;
+procedure TTCPClientComStreamUnix.InternalConnect;
 begin       
 {$IFDEF DGB_WRITE}
-  Writeln('TTCPClientComStream.InternalConnect: Host="',fHost,'; Port="',fPort,'"');
+  Writeln('TTCPClientComStreamUnix.InternalConnect: Host="',fHost,'; Port="',fPort,'"');
 {$ENDIF}
   if Assigned(fTCP) then InternalDisconnect;
   fTCP:=TTCPClient.Create(nil);
@@ -95,10 +95,10 @@ begin
   fTCP.Active:=true;
 end;
 
-procedure TTCPClientComStream.InternalDisconnect;
+procedure TTCPClientComStreamUnix.InternalDisconnect;
 begin
 {$IFDEF DGB_WRITE}
-  Writeln('TTCPClientComStream.InternalDisconnect()');
+  Writeln('TTCPClientComStreamUnix.InternalDisconnect()');
 {$ENDIF}
   if Assigned(fTCP) then begin
     if fTCP.Active then
@@ -108,7 +108,7 @@ begin
   end;
 end;
 
-constructor TTCPClientComStream.Create;
+constructor TTCPClientComStreamUnix.Create;
 begin
   inherited Create;
   fHost:='';
@@ -118,7 +118,7 @@ begin
 end;
 
 {Create a TCP client communication stream directly connecting to the given host and port}
-constructor TTCPClientComStream.Create(aHost:String; aPort:word);
+constructor TTCPClientComStreamUnix.Create(aHost:String; aPort:word);
 begin
   inherited Create;
   fHost:=aHost;
@@ -128,7 +128,7 @@ begin
   InternalConnect;
 end;
 
-destructor TTCPClientComStream.Destroy;
+destructor TTCPClientComStreamUnix.Destroy;
 begin
   InternalDisconnect;
   fHost:='';
@@ -138,21 +138,21 @@ end;
 
 {Connect to the given host or address. Both are separated using a ':',
 resulting to "<host>:<port>".}
-procedure TTCPClientComStream.ConnectTo(resource:string);
+procedure TTCPClientComStreamUnix.ConnectTo(resource:string);
 var
   arr:TStringArray;
   newPort: integer;
   newHost: string;
 begin   
 {$IFDEF DGB_WRITE}
-  Writeln('TTCPClientComStream.ConnectTo("', resource, '")');
+  Writeln('TTCPClientComStreamUnix.ConnectTo("', resource, '")');
 {$ENDIF}
   arr:=resource.Split([':']);
   if Length(arr)<>2 then
     raise EComInvalidResource.CreateFmt(StrComTCP_EInvalidConnection, [resource]);
 
 {$IFDEF DGB_WRITE}
-  Writeln('TTCPClientComStream.ConnectTo: [0]="',arr[0],'; [1]="',arr[1],'"');
+  Writeln('TTCPClientComStreamUnix.ConnectTo: [0]="',arr[0],'; [1]="',arr[1],'"');
 {$ENDIF}
 
   newPort:=StrToIntDef(arr[1], -1);
@@ -167,14 +167,14 @@ begin
 end;
 
 {Disconnect and close the commection}
-procedure TTCPClientComStream.Disconnect;
+procedure TTCPClientComStreamUnix.Disconnect;
 begin
   InternalDisconnect;
 end;
 
 {Write data to the resource, blocking
 When a timeout occurs between receiving bytes, an exception is raised if RaiseTimeout is set to true.}
-function TTCPClientComStream.Write(const Buffer; Count: Longint): Longint;
+function TTCPClientComStreamUnix.Write(const Buffer; Count: Longint): Longint;
 begin
   if not Assigned(fTCP) then
     raise EComLost.Create(StrComTCP_ENoConnection);
@@ -193,7 +193,7 @@ end;
 
 {Read data from the resource, blocking. Returns the actual number of bytes read
 When a timeout occurs between receiving bytes, an exception is raised if RaiseTimeout is set to true.}
-function TTCPClientComStream.Read(var Buffer; Count: Longint): Longint;
+function TTCPClientComStreamUnix.Read(var Buffer; Count: Longint): Longint;
 var
   startTime:TDateTime;
   hasTimeout:boolean;
@@ -225,20 +225,20 @@ end;
 
 {Return the resource type identifier associated with this class. Examples could be "tcp" or
 "serial".}
-class function TTCPClientComStream.GetComResourceType:string;
+class function TTCPClientComStreamUnix.GetComResourceType:string;
 begin
   result:='tcp';
 end;
 
 {Creates a new object of the type of this class. Usefull if accessing the classes using
 their string type identifiers.}
-class function TTCPClientComStream.CreateNew:TAbstractComStream;
+class function TTCPClientComStreamUnix.CreateNew:TAbstractComStream;
 begin
-  result:=TTCPClientComStream.Create;
+  result:=TTCPClientComStreamUnix.Create;
 end;
 
 initialization
   //Register existance of the "typ" resource type
-  ComResourceTypes.Add(TTCPClientComStream);
+  ComResourceTypes.Add(TTCPClientComStreamUnix);
 end.
 
