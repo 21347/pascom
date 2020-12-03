@@ -154,6 +154,18 @@ var
       result:=true;
   end;
 
+  {The port in /sys/class/tty/ is link into /sys/devices/pci..., where the driver
+  can add a serial file. I found it to be in different locations, so try around...}
+  function TryReadSerialFile(portDir:string; out aSerial:string):boolean;
+  begin
+    result:=false;
+    //Try 1st location first...
+    if CatFile(ConcatPaths([portDir,'/device/../serial']), aSerial) then
+      result:=true
+    else if CatFile(ConcatPaths([portDir,'/device/../../serial']), aSerial) then
+      result:=true;
+  end;
+
   {Extract fallback-device type from the driver-name in the path. Has been seen in two
   different locations based on kernel etc.}
   function TryExtractDriverFromPath(portDir:string; out theName:string):boolean;
@@ -213,7 +225,10 @@ begin
           else if sysPortName.Contains('rfcom') then
             aDevice.FriendlyName:='Bluetooth Port '+aPortName.Substring(5);
         end;
-      end;
+      end
+      else
+        //If we could read a product file, maybe the serial number is also there?
+        TryReadSerialFile(sysPortName, aDevice.Serial);
     end;
   finally
     ports.Free;
