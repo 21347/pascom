@@ -36,8 +36,7 @@ type
 procedure TListSerialApplication.ListAndPrint;
 var
   list:TSerialPortList;
-  port:TSerialPortEntry;     
-  jData:TJSONData;
+  port:TSerialPortEntry;
   jObject:TJSONObject;
   jArray:TJSONArray;
 begin
