@@ -1,4 +1,4 @@
-{This unit is based on the JEDI Code Library for the SetupAPI that ships with FreePascal but was corrected and adapter for Win32 AND Win64.
+{This unit is based on the JEDI Code Library for the SetupAPI that ships with FreePascal but was corrected and adapted for Win32 AND Win64.
 The file stays under the original license of the respective files in the FPC repository and will be removed if the changed can be
 applied upstream.}
 
