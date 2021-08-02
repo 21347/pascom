@@ -7,7 +7,7 @@ uses
   cthreads,
   {$ENDIF}
   Classes, SysUtils, CustApp,
-  listserial;
+  listserial, fpjson, jsonparser;
 
 type
 
@@ -16,12 +16,14 @@ type
   TListSerialApplication = class(TCustomApplication)
   private
     fLongMode:boolean;
+    fRobotMode:boolean;
 
     procedure ListAndPrint;
   protected
     procedure DoRun; override;
 
     property LongMode:boolean read fLongMode write fLongMode;
+    property RobotMode:boolean read fRobotMode write fRobotMode;
   public
     constructor Create(TheOwner: TComponent); override;
     destructor Destroy; override;
@@ -34,18 +36,42 @@ type
 procedure TListSerialApplication.ListAndPrint;
 var
   list:TSerialPortList;
-  port:TSerialPortEntry;
+  port:TSerialPortEntry;     
+  jData:TJSONData;
+  jObject:TJSONObject;
+  jArray:TJSONArray;
 begin
   list:=GetSerialPortsEx;
-  for port in list do begin
-    if LongMode then begin
-      Write(port.Name, ' => Device: ', port.DeviceName, '; "', port.FriendlyName, '"');
-      Writeln(' (Ser#: ', port.Serial, ')');
+  try
+    if RobotMode then begin
+      //Print JSON
+      jArray:=TJSONArray.Create;
+      try
+        for port in list do begin
+          jObject:=TJSONObject.Create;
+          jObject.Add('Name', port.Name);
+          jObject.Add('DeviceName', port.DeviceName);
+          jObject.Add('FriendlyName', port.FriendlyName);
+          jObject.Add('Serial', port.Serial);
+          jArray.Add(jObject);
+        end;
+        Writeln(jArray.FormatJSON());
+      finally
+        jArray.Free;
+      end;
     end
     else
-      Writeln(port.Name, ' = ', port.FriendlyName);
+      for port in list do begin
+        if LongMode then begin
+          Write(port.Name, ' => Device: ', port.DeviceName, '; "', port.FriendlyName, '"');
+          Writeln(' (Ser#: ', port.Serial, ')');
+        end
+        else
+          Writeln(port.Name, ' = ', port.FriendlyName);
+      end;
+  finally  
+    list.Free;
   end;
-  list.Free;
 end;
 
 procedure TListSerialApplication.DoRun;
@@ -53,7 +79,7 @@ var
   ErrorMsg: String;
 begin
   // quick check parameters
-  ErrorMsg:=CheckOptions('hl', 'help:long');
+  ErrorMsg:=CheckOptions('hlr', 'help long robot');
   if ErrorMsg<>'' then begin
     ShowException(Exception.Create(ErrorMsg));
     Terminate;
@@ -69,6 +95,7 @@ begin
 
   // Config
   LongMode:=HasOption('l', 'long');
+  RobotMode:=HasOption('r','robot');
 
   // List and print...
   ListAndPrint;
@@ -90,8 +117,12 @@ end;
 
 procedure TListSerialApplication.WriteHelp;
 begin
-  { add your help code here }
-  writeln('Usage: ', ExeName, ' -h');
+  writeln('ListPorts (PasCom list serial)');
+  writeln('Usage: ', ExeName, ' -h {-l/-r}');
+  writeln;
+  writeln(' -h, --help   : Print what your''e reading here');
+  writeln(' -l, --long   : Long-Mode (print all I have)');
+  writeln(' -r, --robot  : Make the list machine-readable (using json), imples --long.');
 end;
 
 var
