@@ -238,7 +238,7 @@ end;
 {$ENDIF}
 
 {$IFDEF WINDOWS}
-uses MinimalSetupApi, Windows, Registry;
+uses MinimalSetupApi, MinimalWin32USB, Windows, Registry;
  
 procedure GetSerialPorts(const toList:TStrings);
 var
@@ -278,6 +278,7 @@ var
   lastError:DWORD;
   devInfoData:TSPDevInfoData;
   continueEnum, haveData:boolean;
+  usbDevice, usbSerial: string;
 
   procedure Fallback;
   var     
@@ -394,6 +395,83 @@ var
     end;
   end;
 
+  {Helper function to get USB device name and serial number, if USB}
+  function USBGetDeviceNameAndSerial(out aUsbDevice, aUsbSerial:string):boolean;
+  var
+    parentDev: DEVINST;
+    location, hubPath, hubGuid:string;
+    usbEnumIndex:DWORD;
+    parentDeviceId: PWideChar;
+    hUsbHub: THandle;
+    hUsbDeviceInfo: HDEVINFO;
+    usbAddress, reqSize, res: DWORD;
+    usbDeviceDesc: TUSBDeviceDescriptor;
+    idOK, serialOK: boolean;
+  begin     
+    aUsbDevice:='';
+    aUsbSerial:='';
+    result:=false;
+    {//Create a setupAPI object to hold information about all USB devices. We need
+    //to find the same device again when enumerating USB devices
+    hUsbDeviceInfo:=SetupDiGetClassDevs(@GUID_DEVCLASS_USB_DEVICE, nil, 0, DIGCF_PRESENT or DIGCF_DEVICEINTERFACE);
+    if hDeviceInfo<>INVALID_HANDLE_VALUE then begin
+      //Iterate through all devices
+      enumIndex:=0;
+      FillChar(devInfoData, SizeOf(TSPDevInfoData), 0);
+      devInfoData.cbSize:=SizeOf(TSPDevInfoData);
+      repeat
+        //https://docs.microsoft.com/de-de/windows/win32/api/setupapi/nf-setupapi-setupdienumdeviceinfo
+        //MSDN states to call GetLastError first to check if it's really the
+        //last device or some other error. This, however, has to occure before any other Windows-API call, so...
+        haveData:=SetupDiEnumDeviceInfo(hDeviceInfo, enumIndex, devInfoData);
+        lastError:=GetLastError();
+        continueEnum:=lastError <> ERROR_NO_MORE_ITEMS;
+
+        //If SetupDiEnumDeviceInfo returned true, we can expect ot have some valid data
+        if haveData then begin
+
+        end;
+      until not continueEnum;}
+
+    //Get parent; for USB-RS232 this is probably the HUB it's connected to
+    parentDev:=0;
+    res:=CM_Get_Parent(parentDev, devInfoData.DevInst, 0);
+    if res<>0 then exit;
+
+    //Get Device ID of that
+    parentDeviceId:=GetMem(2*MAX_PATH);
+    try
+      StringFromGUID2(GUID_DEVINTERFACE_USB_HUB, parentDeviceId, MAX_PATH);
+      hubGuid := parentDeviceId;
+      FillChar(parentDeviceId^, MAX_PATH*2, 0);
+
+      if CM_Get_Device_IDW(parentDev, parentDeviceId, MAX_PATH, 0) = 0 then begin
+        hubPath := parentDeviceId;
+        //See https://stackoverflow.com/questions/28007468/how-do-i-obtain-usb-device-descriptor-given-a-device-path/32641140#32641140
+        hubPath:=hubPath.Replace('\', '#', [rfReplaceAll]);
+        hubPath:='\\?\'+hubPath+'#'+hubGuid;
+        //Get Port number
+        usbAddress:=0;
+        if SetupDiGetDeviceRegistryProperty(hDeviceInfo, devInfoData, SPDRP_ADDRESS, nil,
+                                            @usbAddress, SizeOf(DWORD), @reqSize) then begin
+          //Open IOCTL port to the HUB
+          hUsbHub := CreateFile(PChar(hubPath), GENERIC_WRITE, FILE_SHARE_WRITE, nil, OPEN_EXISTING, 0, 0);
+          if hUsbHub <> INVALID_HANDLE_VALUE then begin
+            //Issue a IOCTL to the HUB to get the USB device descriptor for device usbAddress at the hub
+            if IssueDeviceIORequestForUSBDescriptor(hUsbHub, usbAddress, usbDeviceDesc) then begin
+              //Success if either one of them returns valid data...
+              idOk:=IssueDeviceIORequestForUSBStringDescriptor(hUsbHub, usbAddress, usbDeviceDesc.iProduct, aUsbDevice);
+              serialOk:=IssueDeviceIORequestForUSBStringDescriptor(hUsbHub, usbAddress, usbDeviceDesc.iSerialNumber, aUsbSerial);
+              result:=idOk or serialOk;
+            end;
+          end;
+        end;
+      end;
+    finally
+      FreeMem(parentDeviceId);
+    end;
+  end;
+
 begin
   aList:=TSerialPortList.Create(true);
 
@@ -427,6 +505,16 @@ begin
 
         //-Friendly Name
         aDevice.FriendlyName:=GetDevicePropertyString(SPDRP_FRIENDLYNAME);
+
+        //If the device is in fact a USB<->Serial converter, we can query the USB
+        //subsystem for some more information...
+        if aDevice.DeviceName.Contains('USB') then begin
+          if USBGetDeviceNameAndSerial(usbDevice, usbSerial) then begin
+            aDevice.Serial:=usbSerial;
+            if usbDevice.Length > 0 then
+              aDevice.FriendlyName:=aDevice.FriendlyName + ' - ' + usbDevice;
+          end;
+        end;
 
         //Add to the list...
         aList.Add(aDevice);
