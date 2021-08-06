@@ -17,6 +17,7 @@ type
   private
     fLongMode:boolean;
     fRobotMode:boolean;
+    fTabListMode:boolean;
 
     procedure ListAndPrint;
   protected
@@ -24,6 +25,7 @@ type
 
     property LongMode:boolean read fLongMode write fLongMode;
     property RobotMode:boolean read fRobotMode write fRobotMode;
+    property TabListMode:boolean read fTabListMode write fTabListMode;
   public
     constructor Create(TheOwner: TComponent); override;
     destructor Destroy; override;
@@ -32,6 +34,10 @@ type
 
 { TListSerialApplication }
 
+function QuickEscape(input:string):string;
+begin
+  result:='"'+input.Replace('"', '\"', [rfReplaceAll])+'"';
+end;
 
 procedure TListSerialApplication.ListAndPrint;
 var
@@ -43,20 +49,30 @@ begin
   list:=GetSerialPortsEx;
   try
     if RobotMode then begin
-      //Print JSON
-      jArray:=TJSONArray.Create;
-      try
+      if TabListMode then begin;
+        //Print simple TAB-List
+        Writeln('Name',#9,'DeviceName',#9,'FriendlyName',#9,'Serial');
         for port in list do begin
-          jObject:=TJSONObject.Create;
-          jObject.Add('Name', port.Name);
-          jObject.Add('DeviceName', port.DeviceName);
-          jObject.Add('FriendlyName', port.FriendlyName);
-          jObject.Add('Serial', port.Serial);
-          jArray.Add(jObject);
+          Writeln(QuickEscape(port.Name),#9,QuickEscape(port.DeviceName),#9,
+            QuickEscape(port.FriendlyName),#9,QuickEscape(port.Serial));
         end;
-        Writeln(jArray.FormatJSON());
-      finally
-        jArray.Free;
+      end
+      else begin  
+        //Print JSON
+        jArray:=TJSONArray.Create;
+        try
+          for port in list do begin
+            jObject:=TJSONObject.Create;
+            jObject.Add('Name', port.Name);
+            jObject.Add('DeviceName', port.DeviceName);
+            jObject.Add('FriendlyName', port.FriendlyName);
+            jObject.Add('Serial', port.Serial);
+            jArray.Add(jObject);
+          end;
+          Writeln(jArray.FormatJSON());
+        finally
+          jArray.Free;
+        end;
       end;
     end
     else
@@ -78,10 +94,11 @@ var
   ErrorMsg: String;
 begin
   // quick check parameters
-  ErrorMsg:=CheckOptions('hlr', 'help long robot');
+  ErrorMsg:=CheckOptions('hlrt', 'help long robot tabs');
   if ErrorMsg<>'' then begin
-    ShowException(Exception.Create(ErrorMsg));
-    Terminate;
+    ShowException(Exception.Create(ErrorMsg));  
+    WriteHelp;
+    Terminate(1);
     Exit;
   end;
 
@@ -95,6 +112,13 @@ begin
   // Config
   LongMode:=HasOption('l', 'long');
   RobotMode:=HasOption('r','robot');
+  TabListMode:=HasOption('t', 'tabs');
+  if TabListMode and not RobotMode then begin
+    ShowException(Exception.Create('Cannot use --tabs/-t without --robot/-r.'));  
+    WriteHelp;  
+    Terminate(1);
+    Exit;
+  end;
 
   // List and print...
   ListAndPrint;
@@ -117,11 +141,14 @@ end;
 procedure TListSerialApplication.WriteHelp;
 begin
   writeln('ListPorts (PasCom list serial)');
-  writeln('Usage: ', ExeName, ' -h {-l/-r}');
+  writeln('Usage: ', ExeName, ' -h [-l] [-r [-i]]');
   writeln;
   writeln(' -h, --help   : Print what your''e reading here');
   writeln(' -l, --long   : Long-Mode (print all I have)');
   writeln(' -r, --robot  : Make the list machine-readable (using json), imples --long.');
+  writeln(' -t, --tabs   : Print a TAB-seperated list instead of JSON for old robots,');
+  writeln('                needs --robot. All strings are encapsulated with ", escap-');
+  writeln('                char is \.');
 end;
 
 var
