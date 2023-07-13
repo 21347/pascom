@@ -76,6 +76,9 @@ type
     When a timeout occurs between receiving bytes, an exception is raised if RaiseTimeout is set to true.}
     function Read(var Buffer; Count: Longint): Longint; override;
 
+    {Flush input buffers, if supported by the serial port driver}
+    procedure FlushInput;
+
     {Return the resource type identifier associated with this class. Examples could be "tcp" or
     "serial".}
     class function GetComResourceType:string; override; 
@@ -387,6 +390,19 @@ begin
     if (RaiseTimeout) and (result <> Count) then
       raise EComTimeout.CreateFmt(StrComSer_ETimeout, [fPortName]);
   end;
+end;
+
+{Flush input buffers, if supported by the serial port driver}
+procedure TSerialClientComStream.FlushInput; 
+var
+  bytesAvail:integer;
+begin
+  if fPort = 0 then
+    raise EComLost.Create(StrComSer_ENoConnection);
+
+  GetBytesWaiting(fPort, bytesAvail);
+  if bytesAvail > 0 then
+    SerFlushInput(fPort);
 end;
 
 {Return the resource type identifier associated with this class. Examples could be "tcp" or
