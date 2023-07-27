@@ -83,7 +83,7 @@ type
     needed length and shorter than maxLen, of course. Any data present in the string after the newly received
     data is NOT cleared. You might use SetLength with the return value of this faction to clear any excess
     data if using preallocated strings.}
-    function ReadString(var Dst:string; const maxLen:integer; const term:string=#13):integer; virtual; override;
+    function ReadString(var Dst:string; const maxLen:integer; const term:string=#13):integer; virtual; overload;
 
     {Variant of ReadString with multiple termination characters, any of which will terminate reading.
     Termination is turned off by setting term to an empty array.
@@ -95,7 +95,7 @@ type
     needed length and shorter than maxLen, of course. Any data present in the string after the newly received
     data is NOT cleared. You might use SetLength with the return value of this faction to clear any excess
     data if using preallocated strings.}
-    function ReadString(var Dst:string; const maxLen:integer; const term:array of string):integer; virtual; override;
+    function ReadString(var Dst:string; const maxLen:integer; const term:array of string):integer; virtual; overload;
   public
     {Global timeout (in ms) used by the connection for all operations. Default is 1s.
     Set to 0 to disable waiting (if possible for the specific resource), or to TimeoutInfinite to
@@ -184,7 +184,7 @@ end;
 the termination string has been received. Termination is turned off by setting term to an empty string.
 Returns the actual number of bytes read (including the termination).
 When a timeout occurs between receiving bytes, an exception is raised if RaiseTimeout is set to true.}
-function TAbstractComStream.ReadString(var Dst:string; const maxLen:integer; const term:string=#13):integer; override;
+function TAbstractComStream.ReadString(var Dst:string; const maxLen:integer; const term:string=#13):integer; overload;
 var
   start:TDateTime;
   c:char;
@@ -259,7 +259,7 @@ at position 1 and the string resized only if the initial length of Dst is smalle
 needed length and shorter than maxLen, of course. Any data present in the string after the newly received
 data is NOT cleared. You might use SetLength with the return value of this faction to clear any excess
 data if using preallocated strings.}
-function TAbstractComStream.ReadString(var Dst:string; const maxLen:integer; const term:array of string):integer; override;
+function TAbstractComStream.ReadString(var Dst:string; const maxLen:integer; const term:array of string):integer; overload;
 var
   start:TDateTime;
   c:char;
@@ -304,9 +304,7 @@ begin
           Dst[result]:=c;
 
         //Check if the termination string was found.
-        if term.Length=1 then
-          if Dst[result] = term then termReached:=true
-        else if term.Length > 0 then begin
+        if Length(term) > 0 then begin
           //Check if the string ends with on of the termination strings given in
           //term...
           for checkTerm in term do begin
