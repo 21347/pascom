@@ -83,7 +83,19 @@ type
     needed length and shorter than maxLen, of course. Any data present in the string after the newly received
     data is NOT cleared. You might use SetLength with the return value of this faction to clear any excess
     data if using preallocated strings.}
-    function ReadString(var Dst:string; const maxLen:integer; const term:string=#13):integer; virtual;
+    function ReadString(var Dst:string; const maxLen:integer; const term:string=#13):integer; virtual; override;
+
+    {Variant of ReadString with multiple termination characters, any of which will terminate reading.
+    Termination is turned off by setting term to an empty array.
+    Returns the actual number of bytes read (including the termination).
+    When a timeout occurs between receiving bytes, an exception is raised if RaiseTimeout is set to true.
+
+    The caller can pre-allocate a string in Dst with SetLength, the data will allways be written starting
+    at position 1 and the string resized only if the initial length of Dst is smaller than the currently
+    needed length and shorter than maxLen, of course. Any data present in the string after the newly received
+    data is NOT cleared. You might use SetLength with the return value of this faction to clear any excess
+    data if using preallocated strings.}
+    function ReadString(var Dst:string; const maxLen:integer; const term:array of string):integer; virtual; override;
   public
     {Global timeout (in ms) used by the connection for all operations. Default is 1s.
     Set to 0 to disable waiting (if possible for the specific resource), or to TimeoutInfinite to
@@ -172,7 +184,7 @@ end;
 the termination string has been received. Termination is turned off by setting term to an empty string.
 Returns the actual number of bytes read (including the termination).
 When a timeout occurs between receiving bytes, an exception is raised if RaiseTimeout is set to true.}
-function TAbstractComStream.ReadString(var Dst:string; const maxLen:integer; const term:string=#13):integer;
+function TAbstractComStream.ReadString(var Dst:string; const maxLen:integer; const term:string=#13):integer; override;
 var
   start:TDateTime;
   c:char;
@@ -224,6 +236,85 @@ begin
           //the termination string:
           if Dst.IndexOf(term, result-term.Length, term.Length) = result-term.Length then
             termReached:=true;
+        end;
+      end;
+
+      //Nothing read? Throttle the loop a little. Don't do that if fGlobalTimeout is set to
+      //0, in that case, the user is to blame...
+      if (cLen=0) and (fGlobalTimeout<>0) then
+        Sleep(5); //5 ms is typically lower than the minimal granualty of any task scheduler, but it let's the CPU switch to annother thread...
+    until hasTimeout or (result = maxLen) or termReached;
+  finally
+  end;
+end;
+
+
+{Variant of ReadString with multiple termination characters, any of which will terminate reading.
+Termination is turned off by setting term to an empty array.
+Returns the actual number of bytes read (including the termination).
+When a timeout occurs between receiving bytes, an exception is raised if RaiseTimeout is set to true.
+
+The caller can pre-allocate a string in Dst with SetLength, the data will allways be written starting
+at position 1 and the string resized only if the initial length of Dst is smaller than the currently
+needed length and shorter than maxLen, of course. Any data present in the string after the newly received
+data is NOT cleared. You might use SetLength with the return value of this faction to clear any excess
+data if using preallocated strings.}
+function TAbstractComStream.ReadString(var Dst:string; const maxLen:integer; const term:array of string):integer; override;
+var
+  start:TDateTime;
+  c:char;
+  duration:int64;
+  strLen:integer;
+  hasTimeout:boolean;
+  cLen:integer;
+  termReached:boolean;
+  checkTerm:string;
+begin
+  //Defaults:
+  result:=0;
+  hasTimeout:=false;
+  duration:=0;
+  termReached:=false;
+  //IF the caller allocated the string with some minimal size, don't overwrite this...
+  strLen:=Length(Dst);
+  //Read bytes into the buffer until the stop conditions are met.
+  //Check timeout on each iterition not to take too long.
+  start:=Now;
+  try
+    repeat
+      //1st timeout MUST be handeled by the Read() function for ReadByte to actually timeout.
+      //If there is an exception raised, this will ultimately fail here, but it might be desired anyway...
+      cLen:=Read(c, 1);
+
+      //Check timeout for the entire string.
+      duration:=MilliSecondsBetween(Now, start);
+      if fGlobalTimeout=TimeoutInfinite then
+        hasTimeout:=false
+      else
+        hasTimeout:=duration > fGlobalTimeout;
+
+      //Add to the buffer if one byte has been received and no timeout occured meanwhile
+      if (cLen = 1) and (not hasTimeout) then begin
+        //Advance pos and check if the Dst string is still long enought (if the caller
+        //has allocated a buffer by SetLength e.g.. If not, resize the string by simple concatenation)
+        Inc(result);
+        if result>strLen then
+          Dst:=Dst+c
+        else
+          Dst[result]:=c;
+
+        //Check if the termination string was found.
+        if term.Length=1 then
+          if Dst[result] = term then termReached:=true
+        else if term.Length > 0 then begin
+          //Check if the string ends with on of the termination strings given in
+          //term...
+          for checkTerm in term do begin
+            if Dst.IndexOf(checkTerm, result-checkTerm.Length, checkTerm.Length) = result-checkTerm.Length then begin
+              termReached:=true;
+              break;
+            end;
+          end;
         end;
       end;
 
